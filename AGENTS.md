@@ -45,7 +45,7 @@ Once the checks pass on `main`, CI tags a new version `effortless--v<version>` a
 
 ## Keybindings
 
-The repo doesn't ship the keys. Each developer needs these in `~/.claude/keybindings.json`:
+A mod can't register a chord, so the keys have to live in `~/.claude/keybindings.json`. `/effortless-keys` merges them from `KEYS` in `register.tsx`, and never overwrites another binding or a file it can't parse. It only adds, so anyone who ran it needs a major version to hear about a changed key. It writes these:
 
 ```json
 {

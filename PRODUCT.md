@@ -21,7 +21,7 @@ The change happens while a half-typed prompt stays in the input, adds nothing to
 ## Operating Context
 
 - Mid-prompt, in a terminal. It rests as two words, `opus high`, opens on a keypress, and folds itself away.
-- `shift+arrows` move the dot and `ctrl+1..5` jump to an effort column, through bindings each person adds to `~/.claude/keybindings.json`. Keyboard only, so those bindings are a required install step.
+- `shift+arrows` move the dot and `ctrl+1..5` jump to an effort column, through bindings in `~/.claude/keybindings.json`, which `/effortless-keys` adds. Keyboard only, so running it is a required install step.
 - Prompt caches are per model, so switching models mid-session makes the next request cost more. The mod asks first. Effort changes never ask.
 
 ## Capabilities and Constraints

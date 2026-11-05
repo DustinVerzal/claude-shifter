@@ -126,7 +126,77 @@ async function moveDot($: EngineInterface, arrow: (typeof ARROWS)[number]) {
   }
 }
 
+const KEYS: Record<string, Record<string, string>> = {
+  Global: Object.fromEntries(EFFORTS.map((_, column) => [`ctrl+${column + 1}`, `strip:jump${column + 1}`])),
+  Chat: Object.fromEntries(ARROWS.map(arrow => [`shift+${arrow}`, `command:dot-${arrow}`])),
+}
+
+type KeyBlock = { context?: unknown; bindings?: Record<string, unknown> }
+
+// Adds to what is there, since this file is the person's own: a key they bound to something
+// else stays theirs, and an action they already moved to another key stays there.
+// ponytail: only looks at Global and Chat, the two contexts a mod's keys can clash in here.
+function mergeKeys(blocks: KeyBlock[]) {
+  const ours = blocks.filter(block => typeof block?.context === 'string' && block.context in KEYS && block.bindings)
+  const bound = ours.flatMap(block => Object.entries(block.bindings!))
+  const added: string[] = []
+  const taken: string[] = []
+
+  for (const [context, keys] of Object.entries(KEYS)) {
+    for (const [key, action] of Object.entries(keys)) {
+      if (bound.some(([, existing]) => existing === action)) continue
+
+      const clash = bound.find(([existing]) => existing === key)
+
+      if (clash) {
+        taken.push(`${key} is bound to ${clash[1]}, so ${action} needs another key`)
+        continue
+      }
+
+      let block = ours.find(candidate => candidate.context === context)
+
+      if (!block) {
+        block = { context, bindings: {} }
+        ours.push(block)
+        blocks.push(block)
+      }
+
+      block.bindings![key] = action
+      added.push(key)
+    }
+  }
+
+  return { added, taken }
+}
+
+async function installKeys($: EngineInterface) {
+  const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
+  const path = `${(await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`}/keybindings.json`
+  let file: { bindings?: KeyBlock[] } = { bindings: [] }
+
+  // Anything unreadable stays untouched: writing here would lose the person's bindings.
+  try {
+    if (await $.fs.exists(path)) file = JSON.parse(await $.fs.read(path))
+
+    if (!Array.isArray(file?.bindings)) throw new Error('it has no "bindings" array')
+
+    const { added, taken } = mergeKeys(file.bindings)
+
+    if (added.length) await $.fs.write(path, `${JSON.stringify(file, null, 2)}\n`)
+
+    const summary = added.length
+      ? `Added ${added.join(', ')} to ${path}. Restart Claude Code to use them.`
+      : `Nothing to add to ${path}.`
+
+    return { text: [summary, ...taken].join('\n'), exitCode: taken.length ? 1 : 0 }
+  } catch (error) {
+    return { text: `Left ${path} alone: ${(error as Error).message}. Fix it and run /effortless-keys again.`, exitCode: 1 }
+  }
+}
+
 export const register: Register = on => {
+  on('command.run', { command: 'effortless-keys' }, $ => installKeys($))
+
   on('session.start', async ($, e, next) => {
     // A reload drops the timer that would have folded a grid left open.
     await update($, reach, () => CLOSED)
@@ -148,6 +218,8 @@ export const register: Register = on => {
     for (const arrow of ARROWS) {
       await $.command.register({ name: `dot-${arrow}`, description: `Move the dot ${arrow}`, immediate: true })
     }
+
+    await $.command.register({ name: 'effortless-keys', description: 'Add the effortless keys to keybindings.json' })
 
     return next(e)
   })
