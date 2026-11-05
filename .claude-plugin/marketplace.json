@@ -1,5 +1,5 @@
 {
-  "name": "claude-effort",
+  "name": "effortless",
   "owner": { "name": "Dustin Verzal" },
-  "plugins": [{ "name": "effort-keys", "source": "./" }]
+  "plugins": [{ "name": "effortless", "source": "./" }]
 }
