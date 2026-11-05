@@ -6,14 +6,15 @@
 
 | Path | Holds |
 | --- | --- |
-| `hooks/register.tsx` | All of the mod's code |
+| `hooks/register.tsx` | The hooks: the selection, the keys, the hold, and asking before a model switch |
+| `hooks/band.tsx` | The drawing and all its motion, as a `Client` surface module, plus `EFFORTS` and `MODELS` |
 | `types/index.d.ts` | `Effort` and `Model` types, and the `$.state` contract (`PluginState`) |
 | `effort.test.tsx` | Tests |
 | `hooks/hooks.json` | Points the engine at `register.tsx` |
 | `.claude-plugin/plugin.json`, `marketplace.json` | Manifests |
 | `.claude-plugin/types/` | Engine API types, generated and gitignored. Grep `claude-code/index.d.ts` for any event, `$` method, or element prop. |
 
-The module has no DOM or Node. Everything outside it goes through `$`.
+Neither module has DOM or Node. Everything outside the hooks goes through `$`. The surface module has no `$`, and draws from its props and its own state.
 
 ## Commands
 
@@ -81,11 +82,18 @@ The repo doesn't ship the keys. Each developer needs these in `~/.claude/keybind
 - Module variables survive `/clear` but not a hot reload. A reload runs `register` and `session.start` again, while `$.state` carries over, so new code can meet old values.
 - Render hooks can't write state. Write from a handler or another event, using `update`.
 
-**Use one animation timer.** All opening, holding, fading, and folding goes through `wait()`, so no two can overlap and a key press continues from the rows already drawn. Don't call `$.clock.after` anywhere else. The grid doesn't fade while a dialog is open. `motion.shown` is one scale: `0` is the indicator, up to `BAR` the bar stretches open, and above that the grid unfolds. An effort change opens only the effort names and the selected row (`STRIP`), and other model rows open for a model key.
+**Keep motion on the surface.** A `$.state` write redraws at 30 a second at most, while a surface draws at about 60, so `band.tsx` animates on its own `surface.every(FRAME)` and the hooks only write `reach`. Don't write state per frame.
+
+- `reach` is how far to open, in rows out from the selected one: `0` is the indicator, `STRIP` the effort names and selected row, and `GRID` every row. An effort change opens to `STRIP`, and other model rows open for a model key.
+- The bar eases and rows step, as two values. Rows wait for `BAR_READY` on the way open, and the bar waits for them on the way closed.
+- The motion holds no start or end time, so a key at any moment continues from what's drawn. An effort key during a fold holds the rows still open.
+- The timer stops once settled, so the band costs nothing at rest. `prefersReducedMotion` jumps to the goal.
+
+**Use one hold timer.** Holding goes through `wait()`, so a key press starts it over. Don't call `$.clock.after` anywhere else. The grid doesn't close while a dialog is open.
 
 **Mind how input reaches the mod:**
 
-- A Button's chord only works while it's drawn, and anything drawn on a Button takes clicks too. So the `chords` Buttons are mounted in the indicator, the bar, and the grid with nothing on them, which keeps ctrl+1..5 alive and leaves nothing to click.
+- A Button's chord only works while it's drawn, and anything drawn on a Button takes clicks too. So empty effort Buttons stay mounted beside the `Client`, in the hooks' tree, which keeps ctrl+1..5 alive in every form and leaves nothing to click.
 - A shift-only key can't press a Button, so shift+arrows are `command:` bindings. Those draw an echo and a spinner for a frame, which the `UserMessage` and `Spinner` render hooks hide.
 - Slash commands skip `prompt.submit`, and `turnRunning` relies on that to tell a real turn from a key press.
 
@@ -99,8 +107,9 @@ The repo doesn't ship the keys. Each developer needs these in `~/.claude/keybind
 ## Tests
 
 - Hooks registered through `on` in a test stand in for the engine, and nothing runs beneath them. Answer every event the mod reaches, as the existing tests do.
-- Use `mock.clock(on)` and `clock.advance`. Tests assert on exact timing, so changing `FRAME`, `HOLD`, `FADE`, or `BAR` means updating them.
-- Tests find elements by `key` (`indicator`, `bar-high`, `opus-max`, and the chord Buttons `low` to `max`), so changing a key breaks them.
+- There are two clocks. Use `mock.clock(on)` and `clock.advance` for the hold, and `ui.advance` for frames. The tests repeat `HOLD`, so changing it means updating them.
+- A frame's size follows the wall clock, so assert on order and direction during motion, and on exact values only in a key's first frame or once settled.
+- Tests find elements by `key` (`indicator`, `bar-high`, `opus-max`, and the chord Buttons `low` to `max`), so changing a key breaks them. Pass `in: 'band'` for anything the surface draws, since the chord Buttons are the only keys in the hooks' own tree.
 - Cover behaviour changes by extending the existing scenario tests. Include the decline path for anything that asks.
 
 ## Conventions

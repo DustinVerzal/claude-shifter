@@ -1,38 +1,20 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, Timer } from 'claude-code'
+import type { Elements, EngineInterface, Register, Timer } from 'claude-code'
 
+import { EFFORTS, MODELS } from './band'
+import type { BandProps } from './band'
 import type { Effort, Model } from '../types'
 
-const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
-// Strongest first, so shift+up moves the dot up to a stronger model.
-const MODELS: readonly Model[] = ['fable', 'opus', 'sonnet', 'haiku']
-// The /effort slider's own colors. It animates xhigh and max; here they hold still, since this
-// sits above the prompt all session and every animation shares one timer (wait).
-const COLORS = { low: 'warning', medium: 'success', high: 'permission', xhigh: 'autoAccept' } as const
-// The engine's order for max and ultrathink. The ThemeKey type omits these keys, but they resolve.
-// ponytail: undocumented keys, checked on 2.1.318; if a release drops them, max needs other colors.
-const RAINBOW = ['rainbow_red', 'rainbow_orange', 'rainbow_yellow', 'rainbow_green', 'rainbow_blue', 'rainbow_indigo', 'rainbow_violet'] as const
-const colorOf = (level: Effort, step: number) => (level === 'max' ? RAINBOW[step % RAINBOW.length] : COLORS[level])
 const ARROWS = ['left', 'right', 'up', 'down'] as const
 
-const LABEL = 7
-const WORD = ' medium'.length
-const CELL_MIN = 3
-const CELL_MAX = 9
+// Counted from the key, so it includes the opening.
+const HOLD = 1400
+// How far to open, in rows out from the selected one. An effort change opens only the effort
+// names over the selected model's row.
+const CLOSED = 0
+const STRIP = 1
+const GRID = MODELS.length
 
-// Terminal frames, so these are coarse. The first frame is drawn by the keypress itself.
-const FRAME = 40
-const HOLD = 1200
-const FADE = 150
-const CLOSED = { shown: 0, fading: false }
-// Frames the bar takes to stretch open from the indicator.
-const BAR = 4
-// How far an effort change opens: the effort names over the selected model's row.
-const STRIP = BAR + 1
-const GRID = BAR + MODELS.length
-
-const center = (text: string, width: number) =>
-  text.padStart(Math.floor((width + text.length) / 2)).padEnd(width)
 const isEffort = (value: unknown): value is Effort => EFFORTS.includes(value as Effort)
 const modelOf = (id: string) => MODELS.find(m => id.includes(m)) ?? null
 
@@ -42,9 +24,7 @@ const model = atom({ plugin: 'effortless', key: 'model' } as const, null)
 // An atom, not a variable: writing it has to redraw the Spinner hook that reads it.
 const turnRunning = atom({ plugin: 'effortless', key: 'turnRunning' } as const, false)
 
-// shown: 0 is the indicator; up to BAR, the bar stretching open; above it, the grid out to
-// shown - BAR rows from the selected one.
-const motion = atom({ plugin: 'effortless', key: 'motion' } as const, CLOSED)
+const reach = atom({ plugin: 'effortless', key: 'reach' } as const, CLOSED)
 
 // /clear empties $.state under a new session id, even what session.end wrote, and fires
 // no session.start. Module variables outlive it, so the selection is kept here.
@@ -57,9 +37,10 @@ let agreed = false
 let asking = false
 // The model the engine last asked for, to notice /model or the picker moving it.
 let engineModel: string | null = null
+// ponytail: read when a session starts, so a /config change applies from the next one; read it per press if that shows.
+let still = false
 
-// One timer, so opening, holding, fading and folding can never run over each other,
-// and a keypress in any of them carries on from the rows already drawn.
+// One timer, so a keypress during the hold starts it over. The motion itself runs on the surface.
 let timer: Timer | undefined
 
 function wait($: EngineInterface, ms: number, fn: () => void) {
@@ -67,40 +48,23 @@ function wait($: EngineInterface, ms: number, fn: () => void) {
   timer = $.clock.after(ms, fn)
 }
 
-async function reveal($: EngineInterface, reach = GRID) {
-  timer?.cancel()
-
-  const drawn = (await read($, motion)).shown
-  // Never below what is drawn: an effort key on an open grid holds it instead of snapping it shut.
-  // ponytail: an effort key during a model key's opening frames stops the rows there; carry the reach over if that shows.
-  const shown = Math.max(drawn, Math.min(drawn + 1, reach))
-
-  await update($, motion, () => ({ shown, fading: false }))
-
-  if (shown < reach) wait($, FRAME, () => reveal($, reach))
-  else wait($, HOLD, () => fade($))
+async function reveal($: EngineInterface, to = GRID) {
+  // Never below what is open: an effort key on an open grid holds it instead of snapping it shut.
+  await update($, reach, current => Math.max(current, to))
+  wait($, HOLD, () => close($))
 }
 
-async function fade($: EngineInterface) {
+async function close($: EngineInterface) {
   // The dialog's answer reveals again; the person is still deciding on what the grid shows.
   if (asking) return
 
-  await update($, motion, current => ({ ...current, fading: true }))
-  wait($, FADE, () => fold($))
-}
-
-async function fold($: EngineInterface) {
-  const shown = Math.max((await read($, motion)).shown - 1, 0)
-
-  await update($, motion, () => ({ shown, fading: shown > 0 }))
-
-  if (shown > 0) wait($, FRAME, () => fold($))
+  await update($, reach, () => CLOSED)
 }
 
 // Together, so the grid never opens for a frame on the old value. A dialog keeps action
 // pending, which is why it cannot simply go first.
-async function press($: EngineInterface, action: () => Promise<unknown>, reach?: number) {
-  await Promise.all([reveal($, reach), action()])
+async function press($: EngineInterface, action: () => Promise<unknown>, to?: number) {
+  await Promise.all([reveal($, to), action()])
 }
 
 // The engine's own session override. /effort always prints to the transcript and
@@ -164,12 +128,14 @@ async function moveDot($: EngineInterface, arrow: (typeof ARROWS)[number]) {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     // A reload drops the timer that would have folded a grid left open.
-    await update($, motion, () => CLOSED)
+    await update($, reach, () => CLOSED)
 
     const id = await $.session.model()
-    const { effortLevel, modelSettings } = await $.settings.read()
+    const { effortLevel, modelSettings, prefersReducedMotion } = await $.settings.read()
     const perModel = modelSettings as Record<string, { effortLevel?: unknown }> | undefined
     const saved = perModel?.[id.replace(/\[.*\]$/, '')]?.effortLevel ?? effortLevel
+
+    still = prefersReducedMotion === true
 
     await update($, model, current => current ?? modelOf(id))
 
@@ -270,119 +236,34 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
 
-    const { Box, Button, Text } = $.ui.resolve(e)
-    const [shownEffort, shownModel] = [await currentEffort($), await currentModel($)]
-    const { shown, fading } = await read($, motion)
-    const x = shownEffort ? EFFORTS.indexOf(shownEffort) : -1
-    const y = shownModel ? MODELS.indexOf(shownModel) : -1
-    const full = Math.max(CELL_MIN, Math.min(CELL_MAX, Math.floor((e.props.bodyColumns - LABEL - WORD) / EFFORTS.length)))
-    // Stretching the cells keeps the dot drawn from the first frame, on its own column.
-    const cell = 1 + Math.round(((full - 1) * Math.min(shown, BAR)) / BAR)
-    const reach = Math.floor((cell - 1) / 2)
-
-    // The selected row is one track, the same in the bar and in the grid, so opening the names
-    // and rows moves nothing sideways: the line fills up to the dot.
-    const track = (key: string, column: number) => {
-      const color = shownEffort ? colorOf(shownEffort, column) : undefined
-      const rail = (length: number, filled: boolean, end: boolean) => {
-        const run = (end ? ' ' : filled ? '━' : '─').repeat(length)
-
-        return filled ? <Text color={color}>{run}</Text> : <Text dimColor>{run}</Text>
-      }
-
-      return (
-        <Box key={key}>
-          <Text>
-            {rail(reach, column <= x, column === 0)}
-            {column === x ? (
-              <Text bold color={color}>●</Text>
-            ) : column < x ? (
-              <Text color={color}>·</Text>
-            ) : (
-              <Text dimColor>·</Text>
-            )}
-            {rail(cell - 1 - reach, column < x, column === EFFORTS.length - 1)}
-          </Text>
-        </Box>
-      )
+    // The band is raised on these two only, and mobile is the surface without a Client.
+    const { Box, Button, Client, Text } = $.ui.resolve(e) as Elements['terminal' | 'desktop']
+    const props: BandProps = {
+      effort: await currentEffort($),
+      model: await currentModel($),
+      reach: await read($, reach),
+      bodyColumns: e.props.bodyColumns,
+      still,
     }
-    // /effort colors max letter by letter. Padding takes no step, so it starts on red at any width.
-    const spell = (level: Effort, text: string) => {
-      const lead = text.length - text.trimStart().length
 
-      return [...text].map((letter, i) => <Text key={String(i)} color={colorOf(level, Math.max(i - lead, 0))}>{letter}</Text>)
-    }
-    const word = shownEffort ? <Text bold>{spell(shownEffort, ` ${shownEffort}`)}</Text> : null
-
-    // Mounted in every form and always empty: a Button's chord only works while it is drawn, and
-    // anything drawn on one would take clicks too. ctrl+1..5 in keybindings.json: strip:jump* has
-    // no handler in a normal session.
+    // Beside the band, not in it, and always empty: a Button's chord only works while it is drawn,
+    // and anything drawn on one would take clicks too. ctrl+1..5 in keybindings.json: strip:jump*
+    // has no handler in a normal session.
     // ponytail: undocumented actions; if a release starts handling them, pick other free ones.
-    const chords = EFFORTS.map((level, column) => (
-      <Button
-        key={level}
-        label={level}
-        plain
-        action={`strip:jump${column + 1}`}
-        onPress={() => press($, () => setEffort($, level), STRIP)}
-      >
-        <Text />
-      </Button>
-    ))
-    const name = shownModel ?? '?'
-
-    if (shown === 0) {
-      return (
-        <Box flexDirection="row">
-          <Box key="indicator"><Text><Text bold>{name}</Text>{word}</Text></Box>
-          {chords}
-        </Box>
-      )
-    }
-
-    if (shown <= BAR) {
-      return (
-        <Box flexDirection="row">
-          <Box key="indicator"><Text bold>{name.padEnd(LABEL)}</Text></Box>
-          {EFFORTS.map((level, column) => track(`bar-${level}`, column))}
-          {word}
-          {chords}
-        </Box>
-      )
-    }
-
     return (
-      <Box flexDirection="column">
-        <Box flexDirection="row">
-          <Text>{' '.repeat(LABEL)}</Text>
-          {EFFORTS.map((level, column) =>
-            column === x && !fading ? (
-              <Text key={`name-${level}`} bold>{spell(level, center(level.slice(0, cell - 1), cell))}</Text>
-            ) : (
-              <Text key={`name-${level}`} dimColor>{center(level.slice(0, cell - 1), cell)}</Text>
-            ),
-          )}
-          {chords}
-        </Box>
-        {MODELS.map((name, row) =>
-          y >= 0 && Math.abs(row - y) >= shown - BAR ? null : (
-            <Box key={name} flexDirection="row">
-              {row === y ? (
-                <Text bold>{name.padEnd(LABEL)}</Text>
-              ) : (
-                <Text dimColor>{name.padEnd(LABEL)}</Text>
-              )}
-              {EFFORTS.map((level, column) =>
-                row === y ? (
-                  track(`${name}-${level}`, column)
-                ) : (
-                  <Box key={`${name}-${level}`}><Text dimColor>{center('·', cell)}</Text></Box>
-                ),
-              )}
-              {row === y ? word : null}
-            </Box>
-          ),
-        )}
+      <Box flexDirection="row">
+        <Client key="band" module="./band.tsx" props={props} />
+        {EFFORTS.map((level, column) => (
+          <Button
+            key={level}
+            label={level}
+            plain
+            action={`strip:jump${column + 1}`}
+            onPress={() => press($, () => setEffort($, level), STRIP)}
+          >
+            <Text />
+          </Button>
+        ))}
       </Box>
     )
   })

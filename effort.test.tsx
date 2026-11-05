@@ -7,13 +7,19 @@ const BAND = {
   surface: 'terminal',
   props: { hasSurvey: false, isWorking: false, bodyColumns: 80, maxRows: 10 },
 } as const
+const LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
+// Hook timers run on the mock clock and frames on the drawing's own, so each test moves them apart.
+// Frame assertions stay on order and direction: a frame's size follows the wall clock.
+const HOLD = 1400
+const SETTLE = 400
 
 test('the dot follows arrows, clamps at the edges, and ctrl+1..5 and a typed /effort move it', async ($, on) => {
   const env: Record<string, string | undefined> = {}
   const asks: string[] = []
   let answer: string | null = null
   const messages: SessionMessage[] = []
-  const clock = mock.clock(on)
+
+  mock.clock(on)
 
   // As the engine counts: a local command's row is a user turn, though nothing was sent.
   on('session.turns', () => ({ value: messages.filter(m => m.role === 'user').length }))
@@ -45,15 +51,15 @@ test('the dot follows arrows, clamps at the edges, and ctrl+1..5 and a typed /ef
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const ui = await $.ui.mount(BAND)
-  const dotAt = async (key: string) => (await ui.find({ key, text: /●/ })) !== undefined
+  const dotAt = async (key: string) => (await ui.find({ key, text: /●/, in: 'band' })) !== undefined
 
   // Seeded from settings, and the indicator shows it until a key opens the bar.
-  expect(await ui.find({ key: 'indicator', text: /opus xhigh/ })).toBeDefined()
+  expect(await ui.find({ key: 'indicator', text: /opus xhigh/, in: 'band' })).toBeDefined()
 
   // Right to max, then clamped at the edge.
   await $.command.run({ command: 'dot-right' })
   await $.command.run({ command: 'dot-right' })
-  await clock.advance(200)
+  await ui.advance(SETTLE)
   expect(env.CLAUDE_CODE_EFFORT_LEVEL).toBe('max')
   expect(await dotAt('opus-max')).toBe(true)
 
@@ -150,7 +156,7 @@ test('/clear keeps the dot and the model override, though it empties $.state', a
 
   const ui = await $.ui.mount(BAND)
 
-  expect(await ui.find({ key: 'indicator', text: /sonnet high/ })).toBeDefined()
+  expect(await ui.find({ key: 'indicator', text: /sonnet high/, in: 'band' })).toBeDefined()
 
   // The moved dot still picks the model a request goes to.
   for await (const _ of $.turn.step({ turnId: 't', index: 0, model: 'claude-opus-5-5', messageCount: 1 })) {
@@ -159,7 +165,7 @@ test('/clear keeps the dot and the model override, though it empties $.state', a
 
   // A second /clear, with nothing in state to snapshot, keeps it too.
   await $.session.end({ reason: 'clear', sessionId: 's', resume: { id: 's' } })
-  expect(await ui.find({ key: 'indicator', text: /sonnet high/ })).toBeDefined()
+  expect(await ui.find({ key: 'indicator', text: /sonnet high/, in: 'band' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -185,98 +191,142 @@ test('an effort key stretches the bar open, a model key the grid after it, and b
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const ui = await $.ui.mount(BAND)
-  const drawn = async (key: string) => (await ui.find({ key })) !== undefined
-  const resting = async () => (await ui.find({ key: 'indicator', text: /^\w+ \w+$/ })) !== undefined
-  const widthOf = async (key: string) => (await ui.find({ key }))!.text.length
-  // The chords stay mounted with nothing on them, so no form has anything to click.
-  const nothingToClick = async () => expect(await ui.find({ type: 'Button', text: /\S/ })).toBeUndefined()
+  const inBand = (query: { key?: string; text?: RegExp }) => ui.find({ ...query, in: 'band' })
+  const drawn = async (key: string) => (await inBand({ key })) !== undefined
+  const resting = async () => (await inBand({ key: 'indicator', text: /^\w+ \w+$/ })) !== undefined
+  const barCells = () => Promise.all(LEVELS.map(async level => (await inBand({ key: `bar-${level}` }))?.text ?? ''))
+  const barWidth = async () => (await barCells()).join('').length
+  const openRows = async () =>
+    (await Promise.all(['fable', 'opus', 'sonnet', 'haiku'].map(async row => ((await drawn(`${row}-high`)) ? row : '')))).filter(Boolean)
+  // The chords stay mounted with nothing on them, and the band draws no Buttons, so nothing can be clicked.
+  const nothingToClick = async () => {
+    expect(await ui.find({ type: 'Button', text: /\S/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', in: 'band' })).toBeUndefined()
+  }
 
   // At rest: the model and effort alone, every effort chord still mounted, no bar.
-  expect((await ui.find({ key: 'indicator' }))!.text).toBe('opus high')
-  for (const key of ['low', 'medium', 'high', 'xhigh', 'max']) expect(await drawn(key)).toBe(true)
-  expect(await ui.find({ text: /●/ })).toBeUndefined()
+  expect((await inBand({ key: 'indicator' }))!.text).toBe('opus high')
+  for (const key of LEVELS) expect(await ui.find({ key })).toBeDefined()
+  expect(await inBand({ text: /●/ })).toBeUndefined()
   expect(await drawn('opus-high')).toBe(false)
   await nothingToClick()
 
   // An effort key draws the moved dot in its own frame, and the bar stretches out from there.
   await $.command.run({ command: 'dot-right' })
-  expect(await ui.find({ key: 'bar-xhigh', text: /●/ })).toBeDefined()
+  expect(await inBand({ key: 'bar-xhigh', text: /●/ })).toBeDefined()
   expect(await resting()).toBe(false)
   expect(await drawn('opus-high')).toBe(false)
   await nothingToClick()
 
-  const first = await widthOf('bar-xhigh')
+  // The cells share the columns unevenly, so a frame can add fewer than one per cell.
+  const sizes = (await barCells()).map(cell => cell.length)
 
-  await clock.advance(120)
-  expect(await widthOf('bar-xhigh')).toBeGreaterThan(first)
-  expect(await drawn('opus-high')).toBe(false)
+  expect(Math.max(...sizes) - Math.min(...sizes)).toBe(1)
+
+  // It only ever grows, and the names wait for it.
+  const widths = [await barWidth()]
+
+  for (let frame = 0; frame < 30 && !(await drawn('opus-xhigh')); frame++) {
+    await ui.advance(16)
+
+    if (await inBand({ key: 'bar-low' })) widths.push(await barWidth())
+  }
+
+  expect(widths.length).toBeGreaterThan(1)
+  expect(widths).toEqual([...widths].sort((a, b) => a - b))
 
   // Then the names go over it, and no other model's row opens.
-  await clock.advance(80)
-  expect(await ui.find({ key: 'opus-xhigh', text: /●/ })).toBeDefined()
+  await ui.advance(SETTLE)
+  expect(await inBand({ key: 'opus-xhigh', text: /●/ })).toBeDefined()
   expect(await drawn('opus-high')).toBe(true)
   expect(await drawn('fable-high')).toBe(false)
   expect(await drawn('sonnet-high')).toBe(false)
 
   // Nor does ctrl+1..5.
   await ui.press({ key: 'high' })
-  await clock.advance(200)
+  await ui.advance(SETTLE)
   expect(await drawn('sonnet-high')).toBe(false)
 
-  // It folds back from there on the same hold, through the bar to the indicator.
-  await clock.advance(1000)
+  // It folds back from there on the same hold, through the bar to the indicator, with no pause first.
+  await clock.advance(HOLD - 1)
+  await ui.advance(SETTLE)
   expect(await drawn('opus-high')).toBe(true)
-  await clock.advance(150)
+  await clock.advance(1)
   expect(await drawn('opus-high')).toBe(false)
-  expect(await ui.find({ key: 'bar-high', text: /●/ })).toBeDefined()
-  await clock.advance(160)
+  expect(await inBand({ key: 'bar-high', text: /●/ })).toBeDefined()
+  await ui.advance(SETTLE)
   expect(await resting()).toBe(true)
 
-  // A model key draws the moved dot in its own frame, the bar stretching and then the grid unfolding.
+  // A key during the fold carries on from the width already drawn, in either direction.
+  await $.command.run({ command: 'dot-right' })
+  await ui.advance(SETTLE)
+  await clock.advance(HOLD)
+  await ui.advance(16)
+
+  const shrinking = await barWidth()
+
+  expect(shrinking).toBeLessThan(45)
+  expect(shrinking).toBeGreaterThan(0)
+  await $.command.run({ command: 'dot-left' })
+  expect(await barWidth()).toBe(shrinking)
+  await ui.advance(16)
+  expect(await barWidth()).toBeGreaterThanOrEqual(shrinking)
+  await ui.advance(SETTLE)
+  expect(await drawn('opus-high')).toBe(true)
+  await clock.advance(HOLD)
+  await ui.advance(SETTLE)
+  expect(await resting()).toBe(true)
+
+  // A model key draws the moved dot in its own frame, the bar stretching and then the grid
+  // unfolding, nearest rows first.
   await $.command.run({ command: 'dot-down' })
-  expect(await ui.find({ key: 'indicator', text: /sonnet/ })).toBeDefined()
-  expect(await ui.find({ key: 'bar-high', text: /●/ })).toBeDefined()
+  expect(await inBand({ key: 'indicator', text: /sonnet/ })).toBeDefined()
+  expect(await inBand({ key: 'bar-high', text: /●/ })).toBeDefined()
   expect(await resting()).toBe(false)
 
-  await clock.advance(160)
-  expect(await ui.find({ key: 'sonnet-high', text: /●/ })).toBeDefined()
-  expect(await drawn('opus-high')).toBe(false)
+  const order: string[] = []
 
-  await clock.advance(40)
-  expect(await drawn('opus-high')).toBe(true)
-  expect(await drawn('haiku-high')).toBe(true)
-  expect(await drawn('fable-high')).toBe(false)
+  for (let frame = 0; frame < 40; frame++) {
+    await ui.advance(16)
 
-  await clock.advance(80)
-  expect(await drawn('fable-high')).toBe(true)
+    for (const row of ['sonnet', 'opus', 'haiku', 'fable']) {
+      if (!order.includes(row) && (await drawn(`${row}-high`))) order.push(row)
+    }
+  }
+
+  expect(order).toEqual(['sonnet', 'opus', 'haiku', 'fable'])
+  expect(await inBand({ key: 'sonnet-high', text: /●/ })).toBeDefined()
   await nothingToClick()
 
   // An effort key before the hold ends starts it over, and leaves the open rows drawn.
   await clock.advance(1000)
   await $.command.run({ command: 'dot-right' })
-  await clock.advance(1100)
+  await clock.advance(HOLD - 100)
+  await ui.advance(SETTLE)
   expect(await drawn('fable-high')).toBe(true)
 
   // An effort key halfway through the fold holds the rows still drawn, and the dot never waits.
-  await clock.advance(100 + 150 + 40)
-  expect(await drawn('opus-high')).toBe(true)
-  expect(await drawn('fable-high')).toBe(false)
+  await clock.advance(100)
+  await ui.advance(16)
+
+  const holding = await openRows()
+
+  expect(holding).not.toContain('fable')
   await $.command.run({ command: 'dot-left' })
-  expect(await ui.find({ key: 'sonnet-high', text: /●/ })).toBeDefined()
-  await clock.advance(200)
-  expect(await drawn('opus-high')).toBe(true)
-  expect(await drawn('fable-high')).toBe(false)
+  expect(await inBand({ key: 'sonnet-high', text: /●/ })).toBeDefined()
+  await ui.advance(SETTLE)
+  expect(await openRows()).toEqual(expect.arrayContaining(holding))
+  expect(await openRows()).not.toContain('fable')
 
   // A model key halfway through the fold opens again from there.
-  await clock.advance(1000 + 150)
-  expect(await drawn('sonnet-high')).toBe(true)
-  expect(await drawn('opus-high')).toBe(false)
+  await clock.advance(HOLD)
   await $.command.run({ command: 'dot-up' })
-  await clock.advance(200)
+  await ui.advance(SETTLE)
   expect(await drawn('haiku-high')).toBe(true)
 
   // Left alone it folds away completely.
-  await clock.advance(1200 + 150 + 280)
+  await clock.advance(HOLD)
+  await ui.advance(SETTLE)
   expect(await resting()).toBe(true)
   expect(await drawn('opus-high')).toBe(false)
 
@@ -285,13 +335,15 @@ test('an effort key stretches the bar open, a model key the grid after it, and b
 
   const moving = $.command.run({ command: 'dot-up' })
 
-  await clock.advance(280 + 60000)
+  await clock.advance(HOLD + 60000)
+  await ui.advance(SETTLE)
   expect(asks.length).toBe(1)
   expect(await drawn('haiku-high')).toBe(true)
 
   asks[0]!()
   await moving
-  await clock.advance(1200 + 150 + 280)
+  await clock.advance(HOLD)
+  await ui.advance(SETTLE)
   expect(await resting()).toBe(true)
   await ui.unmount()
 })
@@ -309,19 +361,18 @@ test('the dot keeps its column from the bar into the grid, and the row fits the 
 
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
-  const LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
-
   for (const bodyColumns of [200, 79, 45, 29]) {
     const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns } })
+    const cellsOf = (row: string) => Promise.all(LEVELS.map(async key => (await ui.find({ key: `${row}-${key}`, in: 'band' }))!.text))
 
-    // The last frame of the bar, before the names go over it. Up opens the grid even at the top.
+    // The dot starts on its column in the bar's first frame. Up opens the grid even at the top.
     await $.command.run({ command: 'dot-up' })
-    await clock.advance(120)
+    expect(await ui.find({ key: 'bar-xhigh', text: /●/, in: 'band' })).toBeDefined()
+    await ui.advance(SETTLE)
 
-    const label = (await ui.find({ key: 'indicator' }))!.text
-    const cells = await Promise.all(LEVELS.map(async key => (await ui.find({ key: `bar-${key}` }))!.text))
+    const cells = await cellsOf('fable')
 
-    expect(label.length + cells.join('').length + ' xhigh'.length).toBeLessThanOrEqual(bodyColumns)
+    expect('fable  '.length + cells.join('').length + ' xhigh'.length).toBeLessThanOrEqual(bodyColumns)
     expect(cells.join('').replace(/[ ━─]/g, '')).toBe('···●·')
     // Filled up to the dot, plain after it.
     if (bodyColumns >= 79) {
@@ -330,16 +381,17 @@ test('the dot keeps its column from the bar into the grid, and the row fits the 
       expect(cells[4]).not.toContain('━')
     }
 
-    await clock.advance(160)
-    expect(await Promise.all(LEVELS.map(async key => (await ui.find({ key: `fable-${key}` }))!.text))).toEqual(cells)
+    // Every row keeps the selected row's columns.
+    expect((await cellsOf('opus')).map(cell => cell.length)).toEqual(cells.map(cell => cell.length))
 
-    await clock.advance(1200 + 150 + 280)
+    await clock.advance(HOLD)
+    await ui.advance(SETTLE)
     await ui.unmount()
   }
 
   // The /effort slider's colors, with a rainbow step for each of max's columns and letters.
   const ui = await $.ui.mount(BAND)
-  const find = (text: RegExp) => ui.find({ type: 'Text', text })
+  const find = (text: RegExp) => ui.find({ type: 'Text', text, in: 'band' })
   const COLORS = [
     ['low', 'warning'],
     ['medium', 'success'],
@@ -350,7 +402,7 @@ test('the dot keeps its column from the bar into the grid, and the row fits the 
 
   for (const [level, color] of COLORS) {
     await ui.press({ key: level })
-    await clock.advance(200)
+    await ui.advance(SETTLE)
     expect((await find(/^●$/))?.props.color).toBe(color)
   }
 
@@ -358,13 +410,37 @@ test('the dot keeps its column from the bar into the grid, and the row fits the 
   expect((await find(/^m$/))?.props.color).toBe('rainbow_red')
   expect((await find(/^x$/))?.props.color).toBe('rainbow_yellow')
 
-  // Fading, the selected label dims with the rest of the header; the word beside the dot keeps its colors.
-  await clock.advance(1100)
-  expect((await find(/^ *max *$/))?.props.dimColor).toBe(true)
-  expect((await find(/^m$/))?.props.color).toBe('rainbow_red')
+  await clock.advance(HOLD)
+  await ui.advance(SETTLE)
+  expect(await find(/●/)).toBeUndefined()
+  await ui.unmount()
+})
 
-  await clock.advance(150 + 200)
-  expect(await ui.find({ text: /●/ })).toBeUndefined()
+test('with reduced motion the band jumps to each state, with no frames between', async ($, on) => {
+  const clock = mock.clock(on)
+
+  on('session.messages', () => ({ value: [] }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('env.set', () => ({ value: undefined }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('settings.read', () => ({ value: { effortLevel: 'high', prefersReducedMotion: true } }))
+  on('command.run', () => ({}))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount(BAND)
+  const drawn = async (key: string) => (await ui.find({ key, in: 'band' })) !== undefined
+
+  await $.command.run({ command: 'dot-right' })
+  expect(await ui.find({ key: 'opus-xhigh', text: /●/, in: 'band' })).toBeDefined()
+  expect(await drawn('fable-high')).toBe(false)
+
+  await $.command.run({ command: 'dot-down' })
+  expect(await drawn('fable-high')).toBe(true)
+
+  await clock.advance(HOLD)
+  expect((await ui.find({ key: 'indicator', in: 'band' }))!.text).toBe('sonnet xhigh')
   await ui.unmount()
 })
 
@@ -378,6 +454,6 @@ test('with no effort known yet, the indicator is the model alone', async ($, on)
 
   const ui = await $.ui.mount(BAND)
 
-  expect((await ui.find({ key: 'indicator' }))!.text).toBe('opus')
+  expect((await ui.find({ key: 'indicator', in: 'band' }))!.text).toBe('opus')
   await ui.unmount()
 })

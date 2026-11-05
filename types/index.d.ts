@@ -3,6 +3,6 @@ export type Model = 'fable' | 'opus' | 'sonnet' | 'haiku'
 
 declare module 'claude-code' {
   interface PluginState {
-    'effortless': { effort: Effort | null; model: Model | null; turnRunning: boolean; motion: { shown: number; fading: boolean } }
+    'effortless': { effort: Effort | null; model: Model | null; turnRunning: boolean; reach: number }
   }
 }
