@@ -95,14 +95,7 @@ Once shifting was one keystroke, I stopped choosing once a project and started c
 | `settings.json` | Saved as your default, except `/effort max` | Never written |
 | How long it lasts | Until you change it again | This session, including `/clear` |
 
-## The shift pattern
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/gate-dark.svg">
-  <img src=".github/assets/gate-light.svg" width="100%" alt="A gear gate cut into a plate, five columns by four rows. The columns are gears one to five: low, medium, high, xhigh and max. The rows are the models: fable, opus, sonnet and haiku. A knob starts at opus high. Shift plus right takes it up to xhigh and then max. Control plus one sends it straight to low. Shift plus down twice moves it to haiku. Control plus three sends it to high, and shift plus up twice brings it home to opus.">
-</picture>
-
-Five gears across, one for each effort level. The models run down the side.
+## Use it
 
 <kbd>shift</kbd> + <kbd>←</kbd> <kbd>→</kbd> shifts through the gears, one effort level at a time.<br>
 <kbd>shift</kbd> + <kbd>↑</kbd> <kbd>↓</kbd> moves between models, asking first once a conversation has a reply.<br>
