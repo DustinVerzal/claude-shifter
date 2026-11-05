@@ -1,5 +1,5 @@
 {
-  "name": "effortless",
+  "name": "shifter",
   "owner": { "name": "Dustin Verzal" },
-  "plugins": [{ "name": "effortless", "source": "./" }]
+  "plugins": [{ "name": "shifter", "source": "./" }]
 }

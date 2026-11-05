@@ -1,6 +1,6 @@
 <div align="center">
 
-# effortless
+# shifter
 
 **Changing effort shouldn't take any.**
 
@@ -22,13 +22,13 @@ Model and effort on one line above your Claude Code prompt.<br>Press a key and k
 Run these inside Claude Code, one at a time:
 
 ```text
-/plugin marketplace add DustinVerzal/effortless
-/plugin install effortless@effortless
+/plugin marketplace add DustinVerzal/claude-shifter
+/plugin install shifter@shifter
 /reload-plugins
-/effortless-keys
+/shifter-keys
 ```
 
-Then restart Claude Code. `/effortless-keys` adds the keys to `~/.claude/keybindings.json`, and without them effortless draws but no key moves it. It keeps everything already in that file: if a key is bound to something else, it leaves that binding in place and tells you which action still needs a key.
+Then restart Claude Code. `/shifter-keys` adds the keys to `~/.claude/keybindings.json`, and without them shifter draws but no key moves it. It keeps everything already in that file: if a key is bound to something else, it leaves that binding in place and tells you which action still needs a key.
 
 <details>
 <summary><strong>The keybindings, to add by hand</strong></summary>
@@ -59,7 +59,7 @@ Then restart Claude Code. `/effortless-keys` adds the keys to `~/.claude/keybind
 }
 ```
 
-`strip:jump*` is an undocumented action with no handler in a normal session. If a release starts handling it, `ctrl+1` … `5` will need a new version of effortless.
+`strip:jump*` is an undocumented action with no handler in a normal session. If a release starts handling it, `ctrl+1` … `5` will need a new version of shifter.
 
 </details>
 
@@ -83,7 +83,7 @@ So I left them alone.
 
 Once it was one keystroke, I stopped choosing once a project and started choosing every prompt. I lower effort for small asks and raise it for hard ones. Haiku and low effort finally get used, and they take less of my limit.
 
-| | `/effort` and `/model` | effortless |
+| | `/effort` and `/model` | shifter |
 | --- | --- | --- |
 | Your half-written prompt | Has to be set aside | Stays in the input |
 | Transcript | A new line each time | Nothing |
@@ -116,15 +116,15 @@ There are no dependencies, no background process, and no status line to configur
   <img src=".github/assets/dialog-light.svg" width="100%" alt="Claude Code question dialog headed Model. It reads: Switch to sonnet? Prompt caches are per model, so the next request re-reads the whole conversation and costs more. The options are Switch to sonnet, and Keep haiku.">
 </picture>
 
-Prompt caches are per model, so the request after a switch costs more. Once a conversation has a reply, effortless asks first, and nothing moves unless you agree. One yes covers every move until your next request, so you can walk past a model without answering twice. Effort changes never ask.
+Prompt caches are per model, so the request after a switch costs more. Once a conversation has a reply, shifter asks first, and nothing moves unless you agree. One yes covers every move until your next request, so you can walk past a model without answering twice. Effort changes never ask.
 
 ## Good to know
 
 - **Your other controls still win.** `/effort <level>` moves the dot straight away. The `/effort` slider, `/model` and the picker move it on your next request.
 - **Subagents stay on the session's model.** Only your main requests move, and Claude Code's banner keeps naming the session's model.
-- **It's keyboard only.** effortless adds nothing to click.
+- **It's keyboard only.** shifter adds nothing to click.
 - **`ctrl+1` … `5` need a terminal that reports those keys.** Not all of them do.
-- **To remove it,** run `/plugin uninstall effortless@effortless` and delete the bindings.
+- **To remove it,** run `/plugin uninstall shifter@shifter` and delete the bindings.
 - **Tested on Claude Code 2.1.318.**
 
 <br>

@@ -18,13 +18,13 @@ const GRID = MODELS.length
 const isEffort = (value: unknown): value is Effort => EFFORTS.includes(value as Effort)
 const modelOf = (id: string) => MODELS.find(m => id.includes(m)) ?? null
 
-const effort = atom({ plugin: 'effortless', key: 'effort' } as const, null)
-const model = atom({ plugin: 'effortless', key: 'model' } as const, null)
+const effort = atom({ plugin: 'shifter', key: 'effort' } as const, null)
+const model = atom({ plugin: 'shifter', key: 'model' } as const, null)
 
 // An atom, not a variable: writing it has to redraw the Spinner hook that reads it.
-const turnRunning = atom({ plugin: 'effortless', key: 'turnRunning' } as const, false)
+const turnRunning = atom({ plugin: 'shifter', key: 'turnRunning' } as const, false)
 
-const reach = atom({ plugin: 'effortless', key: 'reach' } as const, CLOSED)
+const reach = atom({ plugin: 'shifter', key: 'reach' } as const, CLOSED)
 
 // /clear empties $.state under a new session id, even what session.end wrote, and fires
 // no session.start. Module variables outlive it, so the selection is kept here.
@@ -190,12 +190,12 @@ async function installKeys($: EngineInterface) {
 
     return { text: [summary, ...taken].join('\n'), exitCode: taken.length ? 1 : 0 }
   } catch (error) {
-    return { text: `Left ${path} alone: ${(error as Error).message}. Fix it and run /effortless-keys again.`, exitCode: 1 }
+    return { text: `Left ${path} alone: ${(error as Error).message}. Fix it and run /shifter-keys again.`, exitCode: 1 }
   }
 }
 
 export const register: Register = on => {
-  on('command.run', { command: 'effortless-keys' }, $ => installKeys($))
+  on('command.run', { command: 'shifter-keys' }, $ => installKeys($))
 
   on('session.start', async ($, e, next) => {
     // A reload drops the timer that would have folded a grid left open.
@@ -219,7 +219,7 @@ export const register: Register = on => {
       await $.command.register({ name: `dot-${arrow}`, description: `Move the dot ${arrow}`, immediate: true })
     }
 
-    await $.command.register({ name: 'effortless-keys', description: 'Add the effortless keys to keybindings.json' })
+    await $.command.register({ name: 'shifter-keys', description: 'Add the shifter keys to keybindings.json' })
 
     return next(e)
   })

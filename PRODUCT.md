@@ -12,7 +12,7 @@ People who use Claude Code every day from a terminal. They care how their limit 
 
 ## Product Purpose
 
-effortless draws the model and effort above the Claude Code prompt, so changing either takes a keypress. Success is a changed habit: effort gets chosen per prompt, and the cheaper settings get used.
+shifter draws the model and effort above the Claude Code prompt, so changing either takes a keypress. Success is a changed habit: effort gets chosen per prompt, and the cheaper settings get used.
 
 ## Positioning
 
@@ -21,7 +21,7 @@ The change happens while a half-typed prompt stays in the input, adds nothing to
 ## Operating Context
 
 - Mid-prompt, in a terminal. It rests as two words, `opus high`, opens on a keypress, and folds itself away.
-- `shift+arrows` move the dot and `ctrl+1..5` jump to an effort column, through bindings in `~/.claude/keybindings.json`, which `/effortless-keys` adds. Keyboard only, so running it is a required install step.
+- `shift+arrows` move the dot and `ctrl+1..5` jump to an effort column, through bindings in `~/.claude/keybindings.json`, which `/shifter-keys` adds. Keyboard only, so running it is a required install step.
 - Prompt caches are per model, so switching models mid-session makes the next request cost more. The mod asks first. Effort changes never ask.
 
 ## Capabilities and Constraints
@@ -34,8 +34,8 @@ The change happens while a half-typed prompt stays in the input, adds nothing to
 
 ## Brand Commitments
 
-- The name is lowercase `effortless`.
-- Repo `DustinVerzal/effortless`, MIT licensed.
+- The name is lowercase `shifter`.
+- Repo `DustinVerzal/claude-shifter`, MIT licensed.
 - The aesthetic is premium and native to Claude Code, confirmed by the author.
 - The "why" is told in the author's first person.
 

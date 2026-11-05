@@ -2,7 +2,7 @@ import type { SessionMessage } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 const BAND = {
-  plugin: 'effortless',
+  plugin: 'shifter',
   component: 'AbovePrompt',
   surface: 'terminal',
   props: { hasSurvey: false, isWorking: false, bodyColumns: 80, maxRows: 10 },
@@ -517,7 +517,7 @@ test('with no effort known yet, the indicator is the model alone', async ($, on)
   await ui.unmount()
 })
 
-test('/effortless-keys adds the keys and leaves everything else in the file alone', async ($, on) => {
+test('/shifter-keys adds the keys and leaves everything else in the file alone', async ($, on) => {
   const PATH = '/home/me/.claude/keybindings.json'
   let file: string | null = null
   let writes = 0
@@ -533,7 +533,7 @@ test('/effortless-keys adds the keys and leaves everything else in the file alon
     return { value: undefined }
   })
 
-  const run = () => $.command.run({ command: 'effortless-keys' })
+  const run = () => $.command.run({ command: 'shifter-keys' })
   const blocks = () => JSON.parse(file!).bindings as { context: string; bindings: Record<string, string> }[]
 
   // No file yet: all nine, and a second run has nothing to do.

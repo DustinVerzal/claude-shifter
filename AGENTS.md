@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`effortless` is a Claude Code mod that draws the model and effort above the prompt, as just `opus high` until they're being changed. Shift+left/right or ctrl+1..5 stretch open the effort bar, and shift+up/down also unfold the model grid. There's no mouse input, on purpose. Changes stay out of the transcript and `settings.json`.
+`shifter` is a Claude Code mod that draws the model and effort above the prompt, as just `opus high` until they're being changed. Shift+left/right or ctrl+1..5 stretch open the effort bar, and shift+up/down also unfold the model grid. There's no mouse input, on purpose. Changes stay out of the transcript and `settings.json`.
 
 ## Layout
 
@@ -41,11 +41,11 @@ claude --plugin-dir .         # Run the mod; saving a file hot-reloads it
 - Minor: new behaviour.
 - Major: something people have to act on, such as a change to the keybindings they copied.
 
-Once the checks pass on `main`, CI tags a new version `effortless--v<version>` and creates its GitHub release. Don't tag by hand. Set `version` only in `plugin.json`, because the marketplace entry's value would be ignored.
+Once the checks pass on `main`, CI tags a new version `shifter--v<version>` and creates its GitHub release. Don't tag by hand. Set `version` only in `plugin.json`, because the marketplace entry's value would be ignored.
 
 ## Keybindings
 
-A mod can't register a chord, so the keys have to live in `~/.claude/keybindings.json`. `/effortless-keys` merges them from `KEYS` in `register.tsx`, and never overwrites another binding or a file it can't parse. It only adds, so anyone who ran it needs a major version to hear about a changed key. It writes these:
+A mod can't register a chord, so the keys have to live in `~/.claude/keybindings.json`. `/shifter-keys` merges them from `KEYS` in `register.tsx`, and never overwrites another binding or a file it can't parse. It only adds, so anyone who ran it needs a major version to hear about a changed key. It writes these:
 
 ```json
 {
