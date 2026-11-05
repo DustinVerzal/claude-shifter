@@ -444,6 +444,56 @@ test('with reduced motion the band jumps to each state, with no frames between',
   await ui.unmount()
 })
 
+test('/model and the picker beat the dot from before the first request on, and only they do', async ($, on) => {
+  const sent: string[] = []
+  // As the engine can have it: the session's model with a suffix, a request's without.
+  let session = 'claude-opus-5-5[1m]'
+  const clock = mock.clock(on)
+
+  on('session.messages', () => ({ value: [] }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('session.model', () => ({ value: session }))
+  on('settings.read', () => ({ value: { effortLevel: 'high', prefersReducedMotion: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.run', () => ({}))
+  on('turn.step', async function* (_, e) {
+    sent.push(e.model)
+
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
+  })
+
+  const request = async (index: number) => {
+    for await (const _ of $.turn.step({ turnId: 't', index, model: session.replace('[1m]', ''), messageCount: 1 })) {
+    }
+  }
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount(BAND)
+  const indicator = async () => (await ui.find({ key: 'indicator', in: 'band' }))!.text
+
+  // /model before the first request: that request goes out on it, and the dot follows.
+  session = 'claude-sonnet-5-5[1m]'
+  await request(0)
+  expect(sent).toEqual(['claude-sonnet-5-5'])
+  expect(await indicator()).toBe('sonnet high')
+
+  // A dot move holds across requests, though they name the model in another form.
+  await $.command.run({ command: 'dot-down' })
+  await clock.advance(HOLD)
+  await request(1)
+  await request(2)
+  expect(sent.slice(1)).toEqual(['haiku', 'haiku'])
+  expect(await indicator()).toBe('haiku high')
+
+  // /model later on wins the same way.
+  session = 'claude-opus-5-5[1m]'
+  await request(3)
+  expect(sent[3]).toBe('claude-opus-5-5')
+  expect(await indicator()).toBe('opus high')
+  await ui.unmount()
+})
+
 test('with no effort known yet, the indicator is the model alone', async ($, on) => {
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))

@@ -35,7 +35,8 @@ const currentModel = async ($: EngineInterface) => (await read($, model)) ?? kep
 
 let agreed = false
 let asking = false
-// The model the engine last asked for, to notice /model or the picker moving it.
+// The session's model as last seen, to notice /model or the picker moving it. Always from
+// $.session.model, since a request can name the same model in another form ([1m]).
 let engineModel: string | null = null
 // ponytail: read when a session starts, so a /config change applies from the next one; read it per press if that shows.
 let still = false
@@ -136,6 +137,8 @@ export const register: Register = on => {
     const saved = perModel?.[id.replace(/\[.*\]$/, '')]?.effortLevel ?? effortLevel
 
     still = prefersReducedMotion === true
+    // Seeded here, so a /model before the first request counts too.
+    engineModel = id
 
     await update($, model, current => current ?? modelOf(id))
 
@@ -218,11 +221,14 @@ export const register: Register = on => {
     if (isEffort(sent)) await update($, effort, () => sent)
 
     // /model or the picker moved the session: that choice wins over the dot.
-    if (engineModel !== null && e.model !== engineModel) {
-      await update($, model, () => modelOf(e.model))
+    // ponytail: noticed at the next request, so a dot move made after /model but before that request loses to it.
+    const session = await $.session.model()
+
+    if (engineModel !== null && session !== engineModel) {
+      await update($, model, () => modelOf(session))
     }
 
-    engineModel = e.model
+    engineModel = session
 
     // The engine keeps no live setter for this, and /model prints and writes settings.
     // ponytail: subagents stay on the session's model; only main requests move.

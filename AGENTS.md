@@ -71,7 +71,7 @@ The repo doesn't ship the keys. Each developer needs these in `~/.claude/keybind
 - Effort is set with `$.env.set('CLAUDE_CODE_EFFORT_LEVEL', ...)`.
 - Model is set by rewriting `e.model` in the `turn.step` hook, for main requests only. Subagents and the engine's own model name stay on the session's model.
 
-**Choices made outside the grid win.** A typed `/effort` clears the env override, and `/model` or the picker moves the dot.
+**Choices made outside the grid win.** A typed `/effort` clears the env override, and `/model` or the picker moves the dot at the next request, which `turn.step` notices by comparing `$.session.model()` with its last value. Don't compare it with `e.model`, because a request can name the same model in another form.
 
 **Ask before switching models.** Prompt caches are per model, so `setModel` confirms with `$.ui.ask` once the conversation has a reply, and changes nothing unless the person agrees. One yes covers every move until the next request (`agreed`), `asking` stops a held arrow from stacking dialogs, and effort changes never ask.
 
