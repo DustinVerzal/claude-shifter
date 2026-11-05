@@ -23,7 +23,8 @@ const model = atom({ plugin: 'effort-keys', key: 'model' } as const, null)
 // An atom, not a variable: writing it has to redraw the Spinner hook that reads it.
 const turnRunning = atom({ plugin: 'effort-keys', key: 'turnRunning' } as const, false)
 
-let warned = false
+let agreed = false
+let asking = false
 // The model the engine last asked for, to notice /model or the picker moving it.
 let engineModel: string | null = null
 
@@ -34,21 +35,42 @@ async function setEffort($: EngineInterface, target: Effort) {
   await update($, effort, () => target)
 }
 
+// Resolves to whether the dot moved: nothing changes until the person agrees.
 async function setModel($: EngineInterface, target: Model) {
-  if (target === (await read($, model))) return
+  const current = await read($, model)
 
-  // Prompt caches are per model. Once per burst of presses, so a held arrow cannot stack toasts.
-  if (!warned && (await $.session.turns()) > 0) {
-    warned = true
-    $.ui.toast('Model changed mid-session: the prompt cache starts over, so the next request costs more')
+  if (target === current) return true
+
+  // Prompt caches are per model. Only the next request pays, so one yes covers
+  // every move until then, and a held arrow cannot stack dialogs behind the open one.
+  if (!agreed && (await $.session.turns()) > 0) {
+    if (asking) return false
+
+    asking = true
+
+    const yes = `Switch to ${target}`
+    const answer = await $.ui
+      .ask(`Switch to ${target}? Prompt caches are per model, so the next request re-reads the whole conversation and costs more.`, {
+        header: 'Model',
+        options: [yes, `Keep ${current ?? 'current model'}`],
+      })
+      .catch(() => null) // Dismissed: the same as keeping the model.
+      .finally(() => {
+        asking = false
+      })
+
+    if (answer !== yes) return false
+
+    agreed = true
   }
 
   await update($, model, () => target)
+
+  return true
 }
 
 async function select($: EngineInterface, row: Model, column: Effort) {
-  await setEffort($, column)
-  await setModel($, row)
+  if (await setModel($, row)) await setEffort($, column)
 }
 
 async function moveDot($: EngineInterface, arrow: (typeof ARROWS)[number]) {
@@ -140,7 +162,7 @@ export const register: Register = on => {
 
     // Also covers turns no prompt started, such as a background task's notification.
     await update($, turnRunning, () => true)
-    warned = false
+    agreed = false
 
     const sent = e.effort
 

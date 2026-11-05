@@ -9,14 +9,20 @@ const BAND = {
 
 test('the dot follows arrows, clamps at the edges, and clicks and a typed /effort move it', async ($, on) => {
   const env: Record<string, string | undefined> = {}
-  const toasts: string[] = []
+  const asks: string[] = []
+  let answer: string | null = null
   let turns = 0
 
   on('session.turns', () => ({ value: turns }))
-  on('ui.toast', (_, e) => {
-    toasts.push(e.text)
+  // $.ui.ask is a tool.call of the engine's question dialog; a dismissal is a deny.
+  on('tool.call', { tool: 'AskUserQuestion' }, (_, e) => {
+    const { question } = e.questions[0]!
 
-    return { value: undefined }
+    asks.push(question)
+
+    if (answer === null) return { deny: 'dismissed' }
+
+    return { result: { questions: e.questions, answers: { [question]: answer } } }
   })
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('env.set', (_, e) => {
@@ -52,13 +58,42 @@ test('the dot follows arrows, clamps at the edges, and clicks and a typed /effor
   await $.command.run({ command: 'dot-down' })
   expect(await dotAt('opus-max')).toBe(true)
 
-  // No warning before the conversation starts; once, not twice, in a burst after it.
-  expect(toasts).toEqual([])
+  // No question before the conversation starts.
+  expect(asks).toEqual([])
   turns = 1
+
+  // Dismissing, keeping and typing under "Other" all leave the dot where it was.
   await $.command.run({ command: 'dot-up' })
+  expect(asks.length).toBe(1)
+  expect(asks[0]).toContain('fable')
+  expect(await dotAt('opus-max')).toBe(true)
+
+  answer = 'Keep opus'
+  await $.command.run({ command: 'dot-up' })
+  expect(await dotAt('opus-max')).toBe(true)
+
+  answer = 'whatever'
+  await $.command.run({ command: 'dot-up' })
+  expect(await dotAt('opus-max')).toBe(true)
+
+  // A declined cell changes neither axis.
+  await ui.press({ key: 'sonnet-low' })
+  expect(env.CLAUDE_CODE_EFFORT_LEVEL).toBe('max')
+  expect(await dotAt('opus-max')).toBe(true)
+
+  // Effort alone never asks.
+  asks.length = 0
+  await ui.press({ key: 'high' })
+  await ui.press({ key: 'max' })
+  expect(asks).toEqual([])
+
+  // Agreeing moves it, and no later move asks again before the next request.
+  answer = 'Switch to fable'
+  await $.command.run({ command: 'dot-up' })
+  expect(await dotAt('fable-max')).toBe(true)
   await $.command.run({ command: 'dot-down' })
-  expect(toasts.length).toBe(1)
-  expect(toasts[0]).toContain('mid-session')
+  expect(await dotAt('opus-max')).toBe(true)
+  expect(asks.length).toBe(1)
 
   // A cell sets both axes; a column header sets effort alone.
   await ui.press({ key: 'sonnet-low' })
