@@ -1,0 +1,6 @@
+{
+  "name": "effort-keys",
+  "version": "0.1.0",
+  "description": "A model and effort grid above the prompt: click a cell or move the dot with shift+arrows, without touching the transcript",
+  "types": "./types/index.d.ts"
+}
