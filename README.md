@@ -125,8 +125,6 @@ Prompt caches are per model, so the request after a switch costs more. Once a co
 - **To remove it,** run `/plugin uninstall effortless@effortless` and delete the bindings.
 - **Tested on Claude Code 2.1.318.**
 
-Rather not choose at all? [magic-router](https://github.com/DustinVerzal/magic-router) picks for you, with a classifier that runs on your machine.
-
 <br>
 
 <sub>To work on it, `claude --plugin-dir .` runs the mod from a clone and hot-reloads on save. [AGENTS.md](AGENTS.md) has the rules. [MIT](LICENSE).</sub>

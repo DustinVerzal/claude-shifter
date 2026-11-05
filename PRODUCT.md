@@ -36,7 +36,6 @@ The change happens while a half-typed prompt stays in the input, adds nothing to
 
 - The name is lowercase `effortless`.
 - Repo `DustinVerzal/effortless`, MIT licensed.
-- Sibling of `DustinVerzal/magic-router`.
 - The aesthetic is premium and native to Claude Code, confirmed by the author.
 - The "why" is told in the author's first person.
 
