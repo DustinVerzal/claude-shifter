@@ -5,6 +5,8 @@ import type { Effort, Model } from '../types'
 export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 // Strongest first, so shift+up moves the dot up to a stronger model.
 export const MODELS: readonly Model[] = ['fable', 'opus', 'sonnet', 'haiku']
+// ponytail: hand-kept, since the engine only names the session's own model. Update on a model release.
+const VERSIONS: Record<Model, string> = { fable: '5.1', opus: '5.5', sonnet: '5.5', haiku: '5.5' }
 // The /effort slider's own colors. It animates xhigh and max; here they hold still, since this
 // sits above the prompt all session.
 const COLORS = { low: 'warning', medium: 'success', high: 'permission', xhigh: 'autoAccept' } as const
@@ -13,7 +15,8 @@ const COLORS = { low: 'warning', medium: 'success', high: 'permission', xhigh: '
 const RAINBOW = ['rainbow_red', 'rainbow_orange', 'rainbow_yellow', 'rainbow_green', 'rainbow_blue', 'rainbow_indigo', 'rainbow_violet'] as const
 const colorOf = (level: Effort, step: number) => (level === 'max' ? RAINBOW[step % RAINBOW.length] : COLORS[level])
 
-const LABEL = 7
+const LABEL = 'sonnet '.length
+const VERSIONED_LABEL = 'sonnet 5.5 '.length
 const WORD = ' medium'.length
 const CELL_MIN = 3
 const CELL_MAX = 9
@@ -125,14 +128,20 @@ const Band: ClientModule<BandProps, Motion> = (props, s) => {
     return <Box key="indicator"><Text><Text bold>{name}</Text>{word}</Text></Box>
   }
 
-  const full = Math.max(CELL_MIN, Math.min(CELL_MAX, Math.floor((bodyColumns - LABEL - WORD) / EFFORTS.length)))
+  // Versions give way first when the row wouldn't fit even at the narrowest cells.
+  const versioned = bodyColumns >= VERSIONED_LABEL + WORD + EFFORTS.length * CELL_MIN
+  const labelWidth = versioned ? VERSIONED_LABEL : LABEL
+  const full = Math.max(CELL_MIN, Math.min(CELL_MAX, Math.floor((bodyColumns - labelWidth - WORD) / EFFORTS.length)))
   // Stretching the cells keeps the dot drawn from the first frame, on its own column.
   const total = EFFORTS.length + Math.round(EFFORTS.length * (full - 1) * m.bar)
   // Each cell's share of the total, so a frame can add one column where one shared width would add five.
   const widthOf = (column: number) =>
     Math.floor(((column + 1) * total) / EFFORTS.length) - Math.floor((column * total) / EFFORTS.length)
   // A column clear of the name from the first frame, growing to the width every row shares.
-  const label = Math.round(name.length + 1 + (LABEL - name.length - 1) * m.bar)
+  const label = Math.round(name.length + 1 + (labelWidth - name.length - 1) * m.bar)
+  // Cut to the growing column, so the version arrives with the stretch and no row pushes the cells.
+  const title = (row: Model | null) =>
+    (row && versioned ? `${row} ${VERSIONS[row]}` : row ?? name).slice(0, label - 1).padEnd(label)
 
   // The selected row is one track, the same in the bar and in the grid, so opening the names
   // and rows moves nothing sideways: the line fills up to the dot.
@@ -166,7 +175,7 @@ const Band: ClientModule<BandProps, Motion> = (props, s) => {
   if (m.rows === 0) {
     return (
       <Box flexDirection="row">
-        <Box key="indicator"><Text bold>{name.padEnd(label)}</Text></Box>
+        <Box key="indicator"><Text bold>{title(model)}</Text></Box>
         {EFFORTS.map((level, column) => track(`bar-${level}`, column))}
         {word}
       </Box>
@@ -191,9 +200,9 @@ const Band: ClientModule<BandProps, Motion> = (props, s) => {
         y >= 0 && Math.abs(index - y) >= m.rows ? null : (
           <Box key={row} flexDirection="row">
             {index === y ? (
-              <Text bold>{row.padEnd(label)}</Text>
+              <Text bold>{title(row)}</Text>
             ) : (
-              <Text dimColor>{row.padEnd(label)}</Text>
+              <Text dimColor>{title(row)}</Text>
             )}
             {EFFORTS.map((level, column) =>
               index === y ? (

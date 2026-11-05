@@ -372,7 +372,16 @@ test('the dot keeps its column from the bar into the grid, and the row fits the 
 
     const cells = await cellsOf('fable')
 
-    expect('fable  '.length + cells.join('').length + ' xhigh'.length).toBeLessThanOrEqual(bodyColumns)
+    // Versions show wherever the wider label still fits the row.
+    const versioned = bodyColumns >= 33
+
+    for (const [row, version] of [['fable', '5.1'], ['opus', '5.5'], ['sonnet', '5.5'], ['haiku', '5.5']]) {
+      const title = new RegExp(`^${row}${versioned ? ` ${version}` : ''} +$`)
+
+      expect(await ui.find({ type: 'Text', text: title, in: 'band' })).toBeDefined()
+    }
+
+    expect((versioned ? 'sonnet 5.5 ' : 'sonnet ').length + cells.join('').length + ' xhigh'.length).toBeLessThanOrEqual(bodyColumns)
     expect(cells.join('').replace(/[ ━─]/g, '')).toBe('···●·')
     // Filled up to the dot, plain after it.
     if (bodyColumns >= 79) {

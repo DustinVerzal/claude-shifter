@@ -100,8 +100,9 @@ The repo doesn't ship the keys. Each developer needs these in `~/.claude/keybind
 **Update these together when adding a model or effort level:**
 
 - `MODELS` or `EFFORTS`, plus the matching type. `MODELS` stays strongest first, because shift+up moves toward stronger models.
+- `VERSIONS`, for a model, and again whenever a new version ships.
 - `COLORS`, for an effort level. These match the `/effort` slider, and `max` draws from `RAINBOW`.
-- Names must fit the 7-column `LABEL` and `CELL` widths.
+- A model's name must fit `LABEL`, its name and version `VERSIONED_LABEL`, and effort names the `CELL` width.
 - `modelOf` matches by substring of the model id, so a model name must not appear inside another model's id.
 
 ## Tests
