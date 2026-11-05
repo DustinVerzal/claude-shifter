@@ -516,3 +516,65 @@ test('with no effort known yet, the indicator is the model alone', async ($, on)
   expect((await ui.find({ key: 'indicator', in: 'band' }))!.text).toBe('opus')
   await ui.unmount()
 })
+
+test('/effortless-keys adds the keys and leaves everything else in the file alone', async ($, on) => {
+  const PATH = '/home/me/.claude/keybindings.json'
+  let file: string | null = null
+  let writes = 0
+
+  mock.env(on, { HOME: '/home/me' })
+  on('fs.exists', () => ({ value: file !== null }))
+  on('fs.read', () => ({ value: file! }))
+  on('fs.write', (_, e) => {
+    expect(e.path).toBe(PATH)
+    file = e.text
+    writes++
+
+    return { value: undefined }
+  })
+
+  const run = () => $.command.run({ command: 'effortless-keys' })
+  const blocks = () => JSON.parse(file!).bindings as { context: string; bindings: Record<string, string> }[]
+
+  // No file yet: all nine, and a second run has nothing to do.
+  expect((await run()).text).toContain(`to ${PATH}`)
+  expect(blocks().find(b => b.context === 'Global')!.bindings['ctrl+5']).toBe('strip:jump5')
+  expect(blocks().find(b => b.context === 'Chat')!.bindings['shift+down']).toBe('command:dot-down')
+  expect((await run()).text).toContain('Nothing to add')
+  expect(writes).toBe(1)
+
+  // The person's own bindings stay: another action on one of our keys, and one of ours moved elsewhere.
+  file = JSON.stringify({
+    $schema: 'kept',
+    bindings: [
+      { context: 'Chat', bindings: { 'shift+up': 'app:mine', 'alt+left': 'command:dot-left', 'ctrl+o': 'app:other' } },
+      { context: 'Transcript', bindings: { 'shift+left': 'app:scroll' } },
+    ],
+  })
+
+  const merged = await run()
+  const chat = blocks().find(b => b.context === 'Chat')!.bindings
+
+  expect(merged.text).toContain('shift+up is bound to app:mine')
+  expect(merged.exitCode).toBe(1)
+  expect(chat['shift+up']).toBe('app:mine')
+  expect(chat['ctrl+o']).toBe('app:other')
+  expect(chat['shift+left']).toBeUndefined()
+  expect(chat['shift+right']).toBe('command:dot-right')
+  expect(blocks().find(b => b.context === 'Transcript')!.bindings).toEqual({ 'shift+left': 'app:scroll' })
+  expect(blocks().find(b => b.context === 'Global')!.bindings['ctrl+1']).toBe('strip:jump1')
+  expect(JSON.parse(file!).$schema).toBe('kept')
+
+  // A file it can't read is never overwritten.
+  for (const broken of ['{ "bindings": [ // a comment\n] }', '{}', '[]', 'null']) {
+    file = broken
+    writes = 0
+
+    const refused = await run()
+
+    expect(refused.text).toContain('Left')
+    expect(refused.exitCode).toBe(1)
+    expect(writes).toBe(0)
+    expect(file).toBe(broken)
+  }
+})

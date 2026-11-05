@@ -1,6 +1,6 @@
 {
   "name": "effortless",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A model and effort grid above the prompt: move the dot with shift+arrows or jump with ctrl+1..5, without touching the transcript",
   "types": "./types/index.d.ts"
 }

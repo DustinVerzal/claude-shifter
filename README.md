@@ -24,12 +24,14 @@ Run these inside Claude Code, one at a time:
 ```text
 /plugin marketplace add DustinVerzal/effortless
 /plugin install effortless@effortless
+/reload-plugins
+/effortless-keys
 ```
 
-Then add the keybindings below to `~/.claude/keybindings.json`, merged with anything already there, and restart Claude Code. Without them, effortless draws but no key moves it.
+Then restart Claude Code. `/effortless-keys` adds the keys to `~/.claude/keybindings.json`, and without them effortless draws but no key moves it. It keeps everything already in that file: if a key is bound to something else, it leaves that binding in place and tells you which action still needs a key.
 
 <details>
-<summary><strong>The keybindings (required)</strong></summary>
+<summary><strong>The keybindings, to add by hand</strong></summary>
 
 ```json
 {
