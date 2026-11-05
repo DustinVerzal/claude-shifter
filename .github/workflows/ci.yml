@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # The version check compares with the base commit
+
+      # Installed copies only update when the version changes, so shipped code
+      # without a bump would never reach anyone.
+      - name: Check the version
+        shell: bash # Adds pipefail, so a base commit that can't be read fails here
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          new=$(jq -r .version .claude-plugin/plugin.json)
+          old=$(git show "$BASE:.claude-plugin/plugin.json" | jq -r .version)
+          if ! echo "$new" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::plugin.json version '$new' isn't MAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          if [ "$new" = "$old" ]; then
+            git diff --quiet "$BASE" HEAD -- hooks types && exit 0
+            echo "::error::hooks/ or types/ changed, so bump the version in plugin.json (still $new)"
+            exit 1
+          fi
+          if [ "$(printf '%s\n' "$old" "$new" | sort -V | tail -1)" != "$new" ]; then
+            echo "::error::plugin.json version went backwards, from $old to $new"
+            exit 1
+          fi
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - run: claude plugin validate .
+      - run: claude plugin test .
+
+      # The engine writes the types tsc needs only when an interactive session
+      # loads the mod, so this runs one on a pty until the write is done. The
+      # token is a placeholder: no request is made, and CI holds no secret.
+      # ponytail: undocumented startup path, swap it for a command if the engine adds one
+      - name: Generate engine types
+        env:
+          ANTHROPIC_AUTH_TOKEN: placeholder
+          ANTHROPIC_BASE_URL: http://127.0.0.1:9
+        run: |
+          echo '{"hasCompletedOnboarding":true,"theme":"dark","projects":{"'"$PWD"'":{"hasTrustDialogAccepted":true,"hasCompletedProjectOnboarding":true}}}' > ~/.claude.json
+          sleep 10 | timeout 10 script -qec 'claude --plugin-dir .' /dev/null || true
+          test -f .claude-plugin/types/tsconfig.json
+
+      - name: Type-check
+        run: npx -y -p typescript@7 tsc -p .
+
+  release:
+    needs: check
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      # The tag format is the one `claude plugin tag` makes and dependency
+      # version ranges read.
+      - name: Release a new version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="effortless--v$(jq -r .version .claude-plugin/plugin.json)"
+          gh release view "$tag" > /dev/null 2>&1 || gh release create "$tag" --target "$GITHUB_SHA" --generate-notes
