@@ -12,6 +12,7 @@
 | `effort.test.tsx` | Tests |
 | `hooks/hooks.json` | Points the engine at `register.tsx` |
 | `.claude-plugin/plugin.json`, `marketplace.json` | Manifests |
+| `.github/workflows/ci.yml` | The checks below on every PR and push to `main`, then the release |
 | `.claude-plugin/types/` | Engine API types, generated and gitignored. Grep `claude-code/index.d.ts` for any event, `$` method, or element prop. |
 
 Neither module has DOM or Node. Everything outside the hooks goes through `$`. The surface module has no `$`, and draws from its props and its own state.
@@ -31,6 +32,16 @@ claude --plugin-dir .         # Run the mod; saving a file hot-reloads it
 - `tsconfig.json` extends the generated types, so on a fresh clone `tsc` fails until the mod has loaded once with `--plugin-dir`.
 - `tsc` covers `hooks/` and `types/` but not `effort.test.tsx`, because the generated config includes `tests/` and the test file sits at the root. `claude plugin test` doesn't report type errors in it, so check test types by hand if you change them.
 - The tests don't cover real key presses or terminal drawing. Check those by running the mod.
+
+## Versioning
+
+`main` is what people install, and an installed copy only updates when `version` in `plugin.json` changes. So merging a bump is the release, and CI fails a change to `hooks/` or `types/` that doesn't bump it. Docs and tests don't need one.
+
+- Patch: a fix.
+- Minor: new behaviour.
+- Major: something people have to act on, such as a change to the keybindings they copied.
+
+Once the checks pass on `main`, CI tags a new version `effortless--v<version>` and creates its GitHub release. Don't tag by hand. Set `version` only in `plugin.json`, because the marketplace entry's value would be ignored.
 
 ## Keybindings
 
