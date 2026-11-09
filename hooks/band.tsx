@@ -6,7 +6,7 @@ export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'ma
 // Strongest first, so shift+up moves the dot up to a stronger model.
 export const MODELS: readonly Model[] = ['fable', 'opus', 'sonnet', 'haiku']
 // ponytail: hand-kept, since the engine only names the session's own model. Update on a model release.
-const VERSIONS: Record<Model, string> = { fable: '5.1', opus: '5.5', sonnet: '5.5', haiku: '5.5' }
+const VERSIONS: Record<Model, string> = { fable: '5.2', opus: '5.5', sonnet: '5.5', haiku: '5.5' }
 // The /effort slider's own colors. It animates xhigh and max; here they hold still, since this
 // sits above the prompt all session.
 const COLORS = { low: 'warning', medium: 'success', high: 'permission', xhigh: 'autoAccept' } as const
