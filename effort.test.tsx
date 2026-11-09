@@ -375,7 +375,7 @@ test('the dot keeps its column from the bar into the grid, and the row fits the 
     // Versions show wherever the wider label still fits the row.
     const versioned = bodyColumns >= 33
 
-    for (const [row, version] of [['fable', '5.1'], ['opus', '5.5'], ['sonnet', '5.5'], ['haiku', '5.5']]) {
+    for (const [row, version] of [['fable', '5.2'], ['opus', '5.5'], ['sonnet', '5.5'], ['haiku', '5.5']]) {
       const title = new RegExp(`^${row}${versioned ? ` ${version}` : ''} +$`)
 
       expect(await ui.find({ type: 'Text', text: title, in: 'band' })).toBeDefined()
